@@ -1,6 +1,7 @@
 import custom_speech_recognition as sr
 import pyaudio
 from datetime import datetime
+import logging
 
 RECORD_TIMEOUT = 3
 ENERGY_THRESHOLD = 1000
@@ -16,10 +17,14 @@ class BaseRecorder:
         self.source_name = source_name
 
     def adjust_for_noise(self, device_name, msg):
-        print(f"[INFO] Adjusting for ambient noise from {device_name}. " + msg)
-        with self.source:
-            self.recorder.adjust_for_ambient_noise(self.source)
-        print(f"[INFO] Completed ambient noise adjustment for {device_name}.")
+        try:
+            print(f"[INFO] Adjusting for ambient noise from {device_name}. " + msg)
+            with self.source:
+                self.recorder.adjust_for_ambient_noise(self.source)
+            print(f"[INFO] Completed ambient noise adjustment for {device_name}.")
+        except Exception as e:
+            logging.error(f"Unexpected error in adjust_for_noise: {e}")
+            raise e
 
     def record_into_queue(self, audio_queue):
         def record_callback(_, audio:sr.AudioData) -> None:
@@ -36,14 +41,15 @@ class DefaultMicRecorder(BaseRecorder):
 class DefaultSpeakerRecorder(BaseRecorder):
     def __init__(self):
         default_speakers = None
-        with pyaudio.PyAudio() as p:
-            for i in range(p.get_device_count()):
-                device_info = p.get_device_info_by_index(i)
-                if 'blackhole' in device_info['name'].lower():
-                    default_speakers = device_info
-                    break
+        p = pyaudio.PyAudio()
+        for i in range(p.get_device_count()):
+            device_info = p.get_device_info_by_index(i)
+            if 'blackhole' in device_info['name'].lower():
+                default_speakers = device_info
+                break
         if default_speakers is None:
             raise Exception("Could not find Blackhole Speakers")
+            p.terminate()  # Add this line to terminate the PyAudio instance
 
         source = sr.Microphone(speaker=True,
                                device_index= default_speakers["index"],
@@ -52,4 +58,9 @@ class DefaultSpeakerRecorder(BaseRecorder):
                                channels=default_speakers["maxInputChannels"])
         super().__init__(source=source, source_name="Speaker")
         self.adjust_for_noise("Default Speaker", "Please make or play some noise from the Default Speaker...")
+
+        self.p = p  # Store the PyAudio instance as an object attribute to manage its life cycle
+
+    def __del__(self):  # Add a destructor method to handle the termination of the PyAudio instance
+        self.p.terminate()
 
