@@ -5,18 +5,19 @@ import queue
 import threading
 import time
 import os
+import logging
+logging.basicConfig(filename='debug.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
 
-from PyQt5.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QLabel, \
+from PyQt6.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QLabel, \
     QTabWidget, QComboBox, QMessageBox, QStyleFactory
-from PyQt5.QtGui import QFont, QTextCursor, QIcon
-from dotenv import load_dotenv
-
+from PyQt6.QtGui import QFont, QTextCursor, QIcon
 
 import AudioRecorder
 from AudioTranscriber import AudioTranscriber
 from chat_utils import GPTChat, SavedTranscriptChat
 
+from dotenv import load_dotenv
 
 load_dotenv('keys.env')
 
@@ -52,7 +53,7 @@ class SetupWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("SalesCopilot Setup")
+        self.setWindowTitle("SalesGPT Setup")
         self.setWindowIcon(
             QIcon('app_icon.png'))  # Set the app icon, ensure the file 'app_icon.png' is in your directory
         self.resize(500, 200)
@@ -105,12 +106,16 @@ class SetupWindow(QWidget):
 
 
     def start_chat(self):
-        self.speaker_name = self.speaker_name_input.text()
-        if self.speaker_name:
-            QMessageBox.information(self, "Initialize", "Click OK, then make some noise from your mic and speaker. This might take a moment.")
-            self.chat_app = ChatApp(self.speaker_name)
-            self.chat_app.show()
-            self.close()
+        try:
+            self.speaker_name = self.speaker_name_input.text()
+            if self.speaker_name:
+                QMessageBox.information(self, "Initialize", "Click OK, then make some noise from your mic and speaker. This might take a moment.")
+                self.chat_app = ChatApp(self.speaker_name)
+                self.chat_app.show()
+                self.close()
+        except Exception as e:
+            logging.error(f"Unexpected error in start_chat: {e}")
+            raise e
 
     def load_file(self):
         selected_file = self.file_dropdown.currentText()
@@ -152,7 +157,7 @@ class ChatApp(QWidget):
         super().__init__()
         self.append_chat_history_signal.connect(self.append_chat_history)
         self.chat = GPTChat()
-        self.chat_for_objection_detection = GPTChat(need_db=True) # This is a separate instance of GPTChat used to avoid weird threading issues - better way to do this?
+        self.chat_for_objection_detection = GPTChat() # This is a separate instance of GPTChat used to avoid weird threading issues - better way to do this?
         self.audio_process = AudioProcess()
         self.global_transcriber = self.audio_process.global_transcriber
 
@@ -179,7 +184,7 @@ class ChatApp(QWidget):
         self.create_widgets()
 
     def create_widgets(self):
-        self.setWindowTitle("SalesCopilot")
+        self.setWindowTitle("SalesGPT")
         self.setWindowIcon(QIcon("app_icon.png"))
 
         self.resize(800, 600)
@@ -225,7 +230,7 @@ class ChatApp(QWidget):
 
         self.chat_history_box.append(
             HTML_MESSAGE_TEMPLATE
-            + "SalesCopilot: " + "</b>" + "Hi! I'm your personal sales assistant. I'll advise you during the call. If you have any questions,"
+            + "SalesGPT: " + "</b>" + "Hi! I'm your personal sales assistant. I'll advise you during the call. If you have any questions,"
                                      "want advice, or anything else, just send me a message!" + "</div>")
 
         self.input_box = QLineEdit()
@@ -311,7 +316,7 @@ class ChatApp(QWidget):
 
         self.response_label_text = "Listening"
         QApplication.processEvents()
-        message = HTML_MESSAGE_TEMPLATE + "SalesCopilot: " + "</b>" + response + "</div>"
+        message = HTML_MESSAGE_TEMPLATE + "SalesGPT: " + "</b>" + response + "</div>"
         self.append_chat_history_signal.emit(message)
 
     def save_transcript(self):
@@ -346,7 +351,7 @@ class ChatApp(QWidget):
             response = self.chat_for_objection_detection.generate_response_from_sales_call(recent_transcript)
             if response is not None:
                 self.sent_to_gpt_count = len(self.transcript)
-                message = HTML_MESSAGE_TEMPLATE + "SalesCopilot: " + "</b>" + response + "</div>"
+                message = HTML_MESSAGE_TEMPLATE + "SalesGPT: " + "</b>" + response + "</div>"
                 self.append_chat_history_signal.emit(message)
                 self.chat.messages.append(self.chat_for_objection_detection.ai_message) # adds the response to the chat history - not sure if this is the best way to do it
 
@@ -376,7 +381,7 @@ class ChatWithSavedTranscript(QWidget):
                            1: 'gpt-4'}
 
     def create_widgets(self):
-        self.setWindowTitle("SalesCopilot")
+        self.setWindowTitle("SalesGPT")
         self.setWindowIcon(QIcon("app_icon.png"))
 
         self.resize(800, 600)
@@ -410,7 +415,7 @@ class ChatWithSavedTranscript(QWidget):
 
         self.chat_history_box.append(
             HTML_MESSAGE_TEMPLATE
-            + "SalesCopilot: " + "</b>" + "Hi! Ask me any questions you have about the transcript! I can evaluate the salesperson's performance, tell you about the customer, "
+            + "SalesGPT: " + "</b>" + "Hi! Ask me any questions you have about the transcript! I can evaluate the salesperson's performance, tell you about the customer, "
                                       "and more." + "</div>")
 
         self.input_box = QLineEdit()
@@ -470,7 +475,7 @@ class ChatWithSavedTranscript(QWidget):
         self.response_label.clear()
         QApplication.processEvents()
 
-        message = HTML_MESSAGE_TEMPLATE + "SalesCopilot: " + "</b>" + response + "</div>"
+        message = HTML_MESSAGE_TEMPLATE + "SalesGPT: " + "</b>" + response + "</div>"
         self.append_chat_history_signal.emit(message)
 
     @pyqtSlot(str)
@@ -481,15 +486,12 @@ class ChatWithSavedTranscript(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle(QStyleFactory.create('fusion'))
-    setup_window = SetupWindow()
-    setup_window.show()
-    sys.exit(app.exec_())
-
-
-
-
-
-
-
+    try:
+        app = QApplication(sys.argv)
+        app.setStyle(QStyleFactory.create('fusion'))
+        setup_window = SetupWindow()
+        setup_window.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise e
