@@ -5,11 +5,13 @@ import queue
 import threading
 import time
 import os
+import logging
+logging.basicConfig(filename='debug.log', level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
 
-from PyQt5.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QLabel, \
+from PyQt6.QtCore import pyqtSlot, QTimer, QThread, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QLabel, \
     QTabWidget, QComboBox, QMessageBox, QStyleFactory
-from PyQt5.QtGui import QFont, QTextCursor, QIcon
+from PyQt6.QtGui import QFont, QTextCursor, QIcon
 
 import AudioRecorder
 from AudioTranscriber import AudioTranscriber
@@ -104,12 +106,16 @@ class SetupWindow(QWidget):
 
 
     def start_chat(self):
-        self.speaker_name = self.speaker_name_input.text()
-        if self.speaker_name:
-            QMessageBox.information(self, "Initialize", "Click OK, then make some noise from your mic and speaker. This might take a moment.")
-            self.chat_app = ChatApp(self.speaker_name)
-            self.chat_app.show()
-            self.close()
+        try:
+            self.speaker_name = self.speaker_name_input.text()
+            if self.speaker_name:
+                QMessageBox.information(self, "Initialize", "Click OK, then make some noise from your mic and speaker. This might take a moment.")
+                self.chat_app = ChatApp(self.speaker_name)
+                self.chat_app.show()
+                self.close()
+        except Exception as e:
+            logging.error(f"Unexpected error in start_chat: {e}")
+            raise e
 
     def load_file(self):
         selected_file = self.file_dropdown.currentText()
@@ -480,15 +486,12 @@ class ChatWithSavedTranscript(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyle(QStyleFactory.create('fusion'))
-    setup_window = SetupWindow()
-    setup_window.show()
-    sys.exit(app.exec_())
-
-
-
-
-
-
-
+    try:
+        app = QApplication(sys.argv)
+        app.setStyle(QStyleFactory.create('fusion'))
+        setup_window = SetupWindow()
+        setup_window.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise e
